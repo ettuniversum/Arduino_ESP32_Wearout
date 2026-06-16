@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <NimBLEDevice.h>
 #include <Adafruit_NeoPixel.h>
+#include <pb_encode.h>
+#include "battery_status.pb.h"
 
 
 NimBLECharacteristic* pCharacteristic    = nullptr;
@@ -20,6 +22,7 @@ Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
 // --- HARDWARE SETTINGS ---
 const int PulseWire = A1;       // Pulse Sensor Purple Wire (Use A1 for 3.3V safety!)
+const int BATTERY_PIN = A2;     // Battery Analog Pin for voltage measurement
 int Threshold = 2000;            // Threshold for "Beat" detection (Adjust if needed)
 
 
@@ -99,8 +102,35 @@ void loop() {
     }
 
     if (deviceConnected) {
-        pCharacteristic->setValue((int)sensorValue);
-        pCharacteristic->notify();
+        // Read battery voltage (assuming 1/2 voltage divider and 3.3V reference)
+        uint32_t raw_voltage = analogReadMilliVolts(BATTERY_PIN);
+        float actual_voltage = (raw_voltage / 1000.0) * 2.0;
+        int current_percentage = map((int)(actual_voltage * 100), 320, 420, 0, 100);
+
+        DeviceData message = DeviceData_init_zero;
+        
+        // Populate heart measurement sub-message
+        message.heart_measurement.ppg_value = sensorValue;
+
+        // Populate battery status sub-message
+        message.battery_status.voltage = raw_voltage;
+        message.battery_status.percentage = constrain(current_percentage, 0, 100);
+        message.battery_status.is_charging = false; // Set based on your hardware logic if available
+
+        // Prepare output buffer and stream
+        uint8_t buffer[DeviceData_size];
+        pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
+
+        // Encode the message
+        bool status = pb_encode(&stream, DeviceData_fields, &message);
+        if (status) {
+            size_t message_length = stream.bytes_written;
+            pCharacteristic->setValue(buffer, message_length);
+            pCharacteristic->notify();
+        } else {
+            Serial.print("Encoding failed: ");
+            Serial.println(PB_GET_ERROR(&stream));
+        }
     }
 
     if (!deviceConnected && oldDeviceConnected) {
@@ -120,5 +150,5 @@ void loop() {
         oldDeviceConnected = deviceConnected;
     }
 
-    delay(50);
+    delay(10);
 }

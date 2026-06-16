@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+message BatteryStatus {
+  // Battery voltage (e.g., 3.7 or 4.2)
+  float voltage = 1;
+  
+  // Estimated battery percentage (0-100)
+  int32 percentage = 2;
+  
+  // True if plugged in/charging
+  bool is_charging = 3; 
+}
+
+message HeartMeasurementData {
+  // Raw PPG heart rate signal reading
+  int32 ppg_value = 1;
+}
+
+message DeviceData {
+  // Heart measurement sub-message
+  HeartMeasurementData heart_measurement = 1;
+  
+  // Battery status sub-message
+  BatteryStatus battery_status = 2;
+}
